@@ -2,6 +2,14 @@
 rm(list=ls())
 library(dplR)
 library(tidyverse)
+
+meta <- readRDS("dataVault/meta.rds")
+rwls <- readRDS("dataVault/rwls.rds")
+
+nrow(meta)
+length(rwls)
+
+
 '______________________________________________________________________________
 some funcitons I will be calling on:
 _______________________________________________________________________________'
