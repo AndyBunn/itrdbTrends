@@ -24,8 +24,6 @@ for(i in 1:nStudies){
 }
 keepers
 summary(keepers)
-# this should work 
-# https://stackoverflow.com/questions/55594152/error-in-test13-recursive-indexing-failed-at-level-2
 
 studies2keep <- (1:nStudies)[keepers] 
 

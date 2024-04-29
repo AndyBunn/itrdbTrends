@@ -3,15 +3,45 @@ rm(list=ls())
 library(dplR)
 library(tidyverse)
 
+'______________________________________________________________________________
+to mask the observations 
+_______________________________________________________________________________'
+
+rm(list=ls())
+library(dplR)
 meta <- readRDS("dataVault/meta.rds")
 rwls <- readRDS("dataVault/rwls.rds")
 
-nrow(meta)
-length(rwls)
+nStudies <- length(rwls)
+
+yrCheckFunction <- function(aRWLObject) {
+  rwlSummary <- summary(aRWLObject)
+  any(rwlSummary$last >= 2000 & rwlSummary$first <= 1900)
+}
+
+# replace this loop with sapply or lapply
+keepers <- logical()
+for(i in 1:nStudies){
+  keepers[i] <- yrCheckFunction(rwls[[i]])
+}
+keepers
+summary(keepers)
+
+studies2keep <- (1:nStudies)[keepers] 
+
+meta21c <- meta[studies2keep,]
+rwl21c <- rwls[studies2keep]
+
+saveRDS(meta21c, file = "~/Desktop/DENDRO PROJECT/itrdbTrends/dataVault/meta21c.rds")
+saveRDS(rwl21c, file = "~/Desktop/DENDRO PROJECT/itrdbTrends/dataVault/rwl21c.rds")
+
 
 '______________________________________________________________________________
 some funcitons I will be calling on:
 _______________________________________________________________________________'
+
+#I need to clean data for last value being after 2000
+#sapply
 
 #to grab values from a model
 extract_values <- function(model) {
@@ -35,7 +65,7 @@ find_recent_trend <-function(df) {
   #need to submit only NA's if there are no observations after 1950
   if (nrow(recent_chron) == 0 || all(is.na(recent_chron$std))) {
     return(c(NA,NA,NA))
-  }
+  }else
   
   recent_chron$year<- as.numeric(rownames(recent_chron))
   model<- lm(std~year,data=recent_chron)
@@ -62,19 +92,18 @@ extract_plm_values <- function(model) {
   Pvalue<-coefficients_summary[, "Pr(>|t|)"]
   return(c(year_effect = as.numeric(Estimate), SE = as.numeric(SE), Pvalue = as.numeric(Pvalue)))
 }
-
 #To make an estimate of the Fixed Effects Regression
 library(plm)
-find_recent_trend_plm <-function(data.frame) {
+find_recent_trend_plm <-function(df) {
   #need to submit only NA's if there are no observations after 1950
 
-  rwi<-data.frame
+  rwi<-df
   rwi$year <- as.numeric(rownames(rwi))
   recent_rwi <- rwi[as.numeric(rownames(rwi)) > 1950, ]
-  if (nrow(recent_rwi) == 0 || all(is.na(recent_rwi$std))) {
+ if (nrow(recent_rwi) == 0) {
     return(c(NA,NA,NA))
-  }
-  
+  }else
+
   long_recent_rwi <- pivot_longer(
     recent_rwi, 
     cols = tree_columns(recent_rwi),
@@ -86,15 +115,16 @@ find_recent_trend_plm <-function(data.frame) {
   results<-extract_plm_values(model_fe)
   return(results)
 }
+
 rwi_ModNegExp<- detrend(rwl = rwls[[1]], method = "ModNegExp")
 find_recent_trend_plm(rwi_ModNegExp)
 
 '______________________________________________________________________________
 Processing some data to find trends:
 _______________________________________________________________________________'
-stand_names <- rownames(meta)
+stand_names <- rownames(rwl2k)
 list_of_estimates<-list()
-for(i in 1:length(rwls)){
+for(i in 1340:length(rwls)){
   df<-rwls[[i]]
   #making three estimates: 
   rwi_ModNegExp<- detrend(rwl = df, method = "ModNegExp")
@@ -107,7 +137,6 @@ for(i in 1:length(rwls)){
     newrow<-c(newrow, trend )
   }
   list_of_estimates[[i]]<-newrow
-  print(i, newrow)
 }
 table_of_estimates<-t(data.frame(list_of_estimates))
 
