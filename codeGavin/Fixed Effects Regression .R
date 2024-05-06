@@ -1,24 +1,25 @@
+
+'______________________________________________________________________________
+Loading data:
+_______________________________________________________________________________'
+
 #Here I find trends using fixed effects regression analysis 
 rm(list=ls())
 library(dplR)
 library(tidyverse)
 library(plm) #panel data
 
-'______________________________________________________________________________
-Loading data:
-_______________________________________________________________________________'
-
-meta <- readRDS("dataVault/meta21c.rds")
+meta <- readRDS("dataVault/meta21c.rds")#note: this in a truncated verion of the data 
 rwls <- readRDS("dataVault/rwl21c.rds")
 
 '______________________________________________________________________________
 some funcitons I will be calling on:
 _______________________________________________________________________________'
 
-
 cutoff<- 2000 #year we start analyzing at 
+#I want to run CV to see what year is best to start with for best predictive power of the year trend? 
 
-#to identify the columns that are trees, inorder to pivot_longer
+#to identify the columns that are trees, in order to pivot_longer
 tree_columns <- function(df) {
   if (!is.data.frame(df)) {  # Trying to use more Validation 
     stop("Input must be a data frame, and should be a RWI dataset")
@@ -38,15 +39,12 @@ extract_plm_values <- function(model) {
   Pvalue<-coefficients_summary[, "Pr(>|t|)"]
   return(c(year_effect = as.numeric(Estimate), SE = as.numeric(SE), Pvalue = as.numeric(Pvalue)))
 }
-#To make an estimate of the Fixed Effects Regression
+#To estimate the Fixed Effects Regression
 find_recent_trend_plm <- function(df) {
   rwi <- df
   rwi$year <- as.numeric(rownames(rwi))
   recent_rwi <- rwi[as.numeric(rownames(rwi)) > cutoff, ]
-  if (nrow(recent_rwi) <= 2) {
-    print("Recent data is near empty")
-    return(c(NA,NA,NA))
-  } else {
+
     long_recent_rwi <- pivot_longer(
       recent_rwi, 
       cols = tree_columns(recent_rwi),
@@ -64,7 +62,6 @@ find_recent_trend_plm <- function(df) {
         results <- extract_plm_values(model_fe)
         return(results)
       }
-    }
   }
 #to wrap it all together into something you can vapply:
 climate_effects<-function(df){
@@ -72,54 +69,43 @@ climate_effects<-function(df){
   recent_years <- df[as.numeric(rownames(df)) > cutoff, ]
   if (nrow(recent_years) <= 2) {
     print("Recent data is near empty")
-    return(c(NA,NA,NA,NA,NA,NA,NA,NA,NA))
+    return(rep(NA,10))#here I remove stands with very few observations 
   } else {
-   #makes 3 different estimate (to show robustness)
-  rwi_ModNegExp<- detrend(rwl = df, method = "ModNegExp")
-  rwi_Mean<- detrend(rwl = df, method = "Mean")
-  rwi_AgeDepSpline <- detrend(rwl = df, method = "AgeDepSpline")
-  rwis<-list(ModNegExp = rwi_ModNegExp, Mean = rwi_Mean, AgeDepSpline = rwi_AgeDepSpline)
-
-  trends<-vapply(rwis, find_recent_trend_plm, FUN.VALUE = numeric(3),USE.NAMES = TRUE)#applying plm to all three
-  flattened_trends <- as.vector(trends)
-  return(flattened_trends)
+    #makes 3 different estimate (to show robustness)
+    rwi_ModNegExp<- detrend(rwl = df, method = "ModNegExp", pos.slope= T, constrain.nls= "when.fail")
+    rwi_Mean<- detrend(rwl = df, method = "Mean")
+    rwi_AgeDepSpline <- detrend(rwl = df, method = "AgeDepSpline", pos.slope= T)
+    rwis<-list(ModNegExp = rwi_ModNegExp, Mean = rwi_Mean, AgeDepSpline = rwi_AgeDepSpline)
+    trends<-vapply(rwis, find_recent_trend_plm, FUN.VALUE = numeric(3),USE.NAMES = TRUE)#applying plm to all three
+    flattened_trends <- as.vector(trends)
+    flattened_trends<-c(flattened_trends, nrow(recent_years))#here I add the number of years in the dataset
+    return(flattened_trends)
   }
 }
+
 #testing functions:
 df<-detrend(rwl= rwls[[10]], method = "Mean")
 find_recent_trend_plm(df)
 climate_effects(rwls[[1]])
 climate_effects(rwls[[341]])
-rwls[[10]]
+df<-rwls[[10]]
+head(meta[10,])
+
 '______________________________________________________________________________
 Applying the functions to the data:
 _______________________________________________________________________________'
-stand_names <- rownames(rwls)
+# Note: by using "microbenchmark" 
+#I found that vapply is ~.341 seconds a stand, 
+# while a forloop is ~.358 seconds a stand
 
-list_of_estimates <- data.frame(
-  ModNegExp = numeric(),
-  SE_ModNegExp = numeric(),
-  P_ModNegExp = numeric(),
-  Mean = numeric(),
-  SE_Mean = numeric(),
-  P_Mean = numeric(),
-  AgeDepSpline = numeric(),
-  SE_AgeDepSpline = numeric(),
-  P_AgeDepSpline = numeric()
-)
+t_mat_of_estimates <- vapply(seq_along(rwls), function(i) {
+  print(paste("Modeling Stand #:", i))
+  climate_effects(rwls[[i]])
+}, FUN.VALUE = numeric(10), USE.NAMES = TRUE)
 
-for( i in 1:length(rwls)){#for dubugging purposes 
-  df<-rwls[[i]]
-  print(paste("stand #", i, sep=""))
-  stand_climate_effects<-climate_effects(df)
-  list_of_estimates[i,]<-c(stand_climate_effects)
-}
-#30 minutes 
-summary(list_of_estimates)
-#for real use purposes 
-list_of_estimates<-vapply(rwls, climate_effects, FUN.VALUE = numeric(9), USE.NAMES = TRUE)
 
-colnames(table_of_estimates) <- c( 
+climate_estimates<-t(data.frame(t_mat_of_estimates))#need to transpose the matrix
+colnames(climate_estimates) <- c( 
                                   "ModNegExp",
                                   "SE_ModNegExp",
                                   "P_ModNegExp",
@@ -128,5 +114,21 @@ colnames(table_of_estimates) <- c(
                                   "P_Mean",
                                   "AgeDepSpline",
                                   "SE_AgeDepSpline",
-                                  "P_AgeDepSpline"
+                                  "P_AgeDepSpline",
+                                  "N_years"
 )
+
+climate_estimates_with_meta<-cbind(meta,climate_estimates)
+'______________________________________________________________________________
+Analysing the resuls:
+_______________________________________________________________________________'
+
+#next up:
+for(i in 0:23){
+  
+  print(paste("the number of stands with >= ", i, " years of observarions is", sum(climate_estimates_with_meta$N_years > i, na.rm = TRUE)))
+  }
+
+
+
+
