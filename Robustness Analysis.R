@@ -1,4 +1,5 @@
-
+#here I try to improve  my previous code, 
+#so that i can look at what is happening along the way, at every step
 '______________________________________________________________________________
 Loading data:
 _______________________________________________________________________________'
@@ -16,11 +17,11 @@ rwls <- readRDS("dataVault/rwl21c.rds")
 some funcitons I will be calling on:
 _______________________________________________________________________________'
 
-cutoff<- 2000 #year we start analyzing at 1971-2000 climate normal 
+cutoff<- 1981 #year we start analyzing at 1981-2010 climate normal 
 # come up with 3 objectives 
 #I want to run CV to see what year is best to start with for best predictive power of the year trend? 
 #times when you can think really big > 
-#you can never stat off with a question that's too small 
+#you can never start off with a question that's too small 
 
 
 #to identify the columns that are trees, in order to pivot_longer
@@ -43,64 +44,53 @@ extract_plm_values <- function(model) {
   Pvalue<-coefficients_summary[, "Pr(>|t|)"]
   return(c(year_effect = as.numeric(Estimate), SE = as.numeric(SE), Pvalue = as.numeric(Pvalue)))
 }
+
 #To estimate the Fixed Effects Regression
 find_recent_trend_plm <- function(df) {
   rwi <- df
   rwi$year <- as.numeric(rownames(rwi))
   recent_rwi <- rwi[as.numeric(rownames(rwi)) > cutoff, ]
-
-    long_recent_rwi <- pivot_longer(
-      recent_rwi, 
-      cols = tree_columns(recent_rwi),
-      names_to = "tree", 
-      values_to = "std"
-    )
-    p_recent_rwi <- pdata.frame(long_recent_rwi, index = "tree")
-    
-      model_fe <- plm(std ~ year, data = p_recent_rwi, model = "within")
-      
-      if (all(model_fe$coefficients == 0)) {
-        print("Model is empty")
-        return(c(NA,NA,NA))
-      } else {
-        results <- extract_plm_values(model_fe)
-        return(results)
-      }
-  }
-#to wrap it all together into something you can vapply:
-climate_effects<-function(df){
-  # here i provide a stop for if there arn't enough years in the 21st century 
-  recent_years <- df[as.numeric(rownames(df)) > cutoff, ]
-  if (nrow(recent_years) <= 2) {
-    print("Recent data is near empty")
-    return(rep(NA,10))#here I remove stands with very few observations 
+  
+  long_recent_rwi <- pivot_longer(
+    recent_rwi, 
+    cols = tree_columns(recent_rwi),
+    names_to = "tree", 
+    values_to = "std"
+  )
+  p_recent_rwi <- pdata.frame(long_recent_rwi, index = "tree")
+  
+  model_fe <- plm(std ~ year, data = p_recent_rwi, model = "within")
+  
+  if (all(model_fe$coefficients == 0)) {
+    print("Model is empty")
+    return(c(NA,NA,NA))
   } else {
-    #makes 3 different estimate (to show robustness)
+    results <- extract_plm_values(model_fe)
+    return(results)
+  }
+}
+
+
+#making a function that just detrends, but does not PLM 
+thrice_detrended<-function(df){
+    #makes 3 different estimates (to show robustness)
     rwi_ModNegExp<- detrend(rwl = df, method = "ModNegExp", pos.slope= T, constrain.nls= "when.fail")
     rwi_Mean<- detrend(rwl = df, method = "Mean")
     rwi_AgeDepSpline <- detrend(rwl = df, method = "AgeDepSpline", pos.slope= T)
     rwis<-list(ModNegExp = rwi_ModNegExp, Mean = rwi_Mean, AgeDepSpline = rwi_AgeDepSpline)
-    trends<-vapply(rwis, find_recent_trend_plm, FUN.VALUE = numeric(3),USE.NAMES = TRUE)#applying plm to all three
-    flattened_trends <- as.vector(trends)
-    flattened_trends<-c(flattened_trends, nrow(recent_years))#here I add the number of years in the dataset
-    return(flattened_trends)
-  }
+    return(rwis)
 }
 
-#testing functions:
-df<-detrend(rwl= rwls[[10]], method = "Mean")
-find_recent_trend_plm(df)
-climate_effects(rwls[[1]])
-climate_effects(rwls[[341]])
-df<-rwls[[10]]
-head(meta[10,])
+
 
 '______________________________________________________________________________
 Applying the functions to the data:
 _______________________________________________________________________________'
-# Note: by using "microbenchmark" 
-#I found that vapply is ~.341 seconds a stand, 
-# while a forloop is ~.358 seconds a stand
+set.
+#step1: detrend
+plot()
+
+chronologies<-lapply(rwis,chron)#making chronology of all three 
 
 t_mat_of_estimates <- vapply(seq_along(rwls), function(i) {
   print(paste("Modeling Stand #:", i))
@@ -110,22 +100,24 @@ t_mat_of_estimates <- vapply(seq_along(rwls), function(i) {
 
 climate_estimates<-t(data.frame(t_mat_of_estimates))#need to transpose the matrix
 colnames(climate_estimates) <- c( 
-                                  "ModNegExp",
-                                  "SE_ModNegExp",
-                                  "P_ModNegExp",
-                                  "Mean",
-                                  "SE_Mean",
-                                  "P_Mean",
-                                  "AgeDepSpline",
-                                  "SE_AgeDepSpline",
-                                  "P_AgeDepSpline",
-                                  "N_years"
+  "ModNegExp",
+  "SE_ModNegExp",
+  "P_ModNegExp",
+  "Mean",
+  "SE_Mean",
+  "P_Mean",
+  "AgeDepSpline",
+  "SE_AgeDepSpline",
+  "P_AgeDepSpline",
+  "N_years"
 )
 
 climate_estimates_with_meta<-cbind(meta,climate_estimates)
+climate_estimates_with_meta<-cbind(meta,climate_estimates)
+climate_estimates_with_meta<-subset(climate_estimates_with_meta, N_years < 46 )
 
-write.csv(climate_estimates_with_meta,
-          file="dataVault/Cleaned Data/Fixed_Effects.csv"
+write.csv(data.frame(climate_estimates_with_meta),
+          file="dataVault/Fixed_Effects.csv"
 )
 
 
@@ -135,9 +127,10 @@ Analysing the resuls:
 _______________________________________________________________________________'
 
 #next up:
-for(i in 0:23){
+for(i in 23:50){
   
   print(paste("the number of stands with >= ", i, " years of observarions is", sum(climate_estimates_with_meta$N_years > i, na.rm = TRUE)))
-  }
+}
+1981+44
 
 

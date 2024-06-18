@@ -140,16 +140,6 @@ for(i in 1340:length(rwls)){
 }
 table_of_estimates<-t(data.frame(list_of_estimates))
 
-colnames(table_of_estimates) <- c("Stand", 
-                                  "ModNegExp",
-                                  "SE_ModNegExp",
-                                  "P_ModNegExp",
-                                  "Mean",
-                                  "SE_Mean",
-                                  "P_Mean",
-                                  "AgeDepSpline",
-                                  "SE_AgeDepSpline",
-                                  "P_AgeDepSpline"
-)
+
 
 
