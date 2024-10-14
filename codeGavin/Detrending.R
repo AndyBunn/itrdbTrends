@@ -61,22 +61,27 @@ rm_bio_signal<-function(df, cutoff, data_check, method){
 }
 
 rwis<-list() #making an empty list
-rwis$AgeDepSpline<- lapply(seq_along(rwls), function(i) {
+#so previously I had all of these stored in a list.
+rwis_AgeDepSpline<- lapply(seq_along(rwls), function(i) {
   print(paste("Detrending Stand #:", i))
   rm_bio_signal(rwls[[i]],cutoff,suf_data[i],"AgeDepSpline")
 })
+saveRDS(rwis_AgeDepSpline, file = "dataVault/rwis_AgeDepSpline.rds", ascii = FALSE, version = NULL,
+        compress = TRUE, refhook = NULL)
 
-rwis$Mean<- lapply(seq_along(rwls), function(i) {
+rwis_Mean<- lapply(seq_along(rwls), function(i) {
   print(paste("Detrending Stand #:", i))
   rm_bio_signal(rwls[[i]],cutoff,suf_data[i],"Mean")
 })
+saveRDS(rwis_Mean, file = "dataVault/rwis_Mean.rds", ascii = FALSE, version = NULL,
+        compress = TRUE, refhook = NULL)
 
-rwis$ModNegExp<- lapply(seq_along(rwls), function(i) {
+rwis_ModNegExp<- lapply(seq_along(rwls), function(i) {
   print(paste("Detrending Stand #:", i))
   rm_bio_signal(rwls[[i]],cutoff,suf_data[i],"ModNegExp")
 })
 
-saveRDS(rwis, file = "dataVault/rwis.rds", ascii = FALSE, version = NULL,
+saveRDS(rwis_ModNegExp, file = "dataVault/rwis_ModNegExp.rds", ascii = FALSE, version = NULL,
         compress = TRUE, refhook = NULL)
 
 

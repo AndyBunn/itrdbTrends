@@ -1,6 +1,5 @@
 # AGB April 5, 2024
 
-
 # This is an example for Gavin of look at. Shows how we can extract  
 # use a logical mask to check if a given rwl meets the time window for the
 # 20th century

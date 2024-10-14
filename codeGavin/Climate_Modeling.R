@@ -8,7 +8,9 @@ library(tidyverse)
 library(plm) #panel data
 
 meta <- readRDS("dataVault/meta.rds")#note: this is not a truncated version of the data 
-rwis <- readRDS("dataVault/rwis.rds")
+rwis_Mean <- readRDS("dataVault/rwis_Mean.rds")
+rwis_ModNegExp <- readRDS("dataVault/rwis_ModNegExp.rds")
+rwis_AgeDepSpline <- readRDS("dataVault/rwis_AgeDepSpline.rds")
 
 cutoff<- 1971 #year we start analyzing at 1971-2000 climate normal 
 data_standard = 20 #the minimum number of years of data after 1971 to be used in analysis. 
@@ -62,19 +64,19 @@ extract_plm_values <- function(model) {
 }
 # Then we apply the function to each stand:
 climate_effects<-list() #making an empty list
-climate_effects$AgeDepSpline<- lapply(seq_along(rwis$AgeDepSpline), function(i) {
+climate_effects$AgeDepSpline<- lapply(seq_along(rwis_AgeDepSpline), function(i) {
   print(paste("Fitting climate trend for Stand #:", i))
-  find_recent_trend_plm(rwis$AgeDepSpline[[i]],cutoff)
+  find_recent_trend_plm(rwis_AgeDepSpline[[i]],cutoff)
 })
 
-climate_effects$Mean<- lapply(seq_along(rwis$Mean), function(i) {
+climate_effects$Mean<- lapply(seq_along(rwis_Mean), function(i) {
   print(paste("Fitting climate trend for Stand #:", i))
-  find_recent_trend_plm(rwis$Mean[[i]],cutoff)
+  find_recent_trend_plm(rwis_Mean[[i]],cutoff)
 })
 
-climate_effects$ModNegExp<- lapply(seq_along(rwis$ModNegExp), function(i) {
+climate_effects$ModNegExp<- lapply(seq_along(rwis_ModNegExp), function(i) {
   print(paste("Fitting climate trend for Stand #:", i))
-  find_recent_trend_plm(rwis$ModNegExp[[i]],cutoff)
+  find_recent_trend_plm(rwis_ModNegExp[[i]],cutoff)
 })
 
 saveRDS(climate_effects, file = "dataVault/climate_effects.rds", ascii = FALSE, version = NULL,
