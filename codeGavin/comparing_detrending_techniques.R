@@ -7,10 +7,11 @@ library(tidyverse)
 library(PNWColors)
 library(gridExtra)
 
-df <- read.csv("dataVault/Fixed_Effects.csv")
-
-str(df)
-cor(df[c("ModNegExp","Mean","AgeDepSpline")])#whoa, lower then expected 
+df<-readRDS("dataVault/climate_effects.rds")
+ModNegExp<-data.frame((df$ModNegExp))
+Mean<-data.frame(df$Mean)
+AgeDepSpline<-data.frame(df$AgeDepSpline)
+head(AgeDepSpline)
 
 #plotting this relationship:
 pal2<-pnw_palette(name="Cascades",n=3)
