@@ -63,21 +63,33 @@ extract_plm_values <- function(model) {
   
 }
 # Then we apply the function to each stand:
-climate_effects<-list() #making an empty list
-climate_effects$AgeDepSpline<- lapply(seq_along(rwis_AgeDepSpline), function(i) {
+
+climate_effects_AgeDepSpline <-lapply(seq_along(rwis_AgeDepSpline), function(i) {
   print(paste("Fitting climate trend for Stand #:", i))
   find_recent_trend_plm(rwis_AgeDepSpline[[i]],cutoff)
 })
+climate_effects_AgeDepSpline<-data.frame(t(data.frame(climate_effects_AgeDepSpline)))
+rownames(climate_effects_AgeDepSpline)<-seq_along(rwis_AgeDepSpline)
+saveRDS(climate_effects_AgeDepSpline, file = "dataVault/climate_effects_AgeDepSpline.rds", ascii = FALSE, version = NULL,
+        compress = TRUE, refhook = NULL)
 
-climate_effects$Mean<- lapply(seq_along(rwis_Mean), function(i) {
+#now doing the same with the mean estimate:
+climate_effects_Mean<- lapply(seq_along(rwis_Mean), function(i) {
   print(paste("Fitting climate trend for Stand #:", i))
   find_recent_trend_plm(rwis_Mean[[i]],cutoff)
 })
+climate_effects_Mean<-data.frame(t(data.frame(climate_effects_Mean)))
+rownames(climate_effects_Mean)<-seq_along(rwis_Mean)
+saveRDS(climate_effects_Mean, file = "dataVault/climate_effects_Mean.rds", ascii = FALSE, version = NULL,
+        compress = TRUE, refhook = NULL)
 
-climate_effects$ModNegExp<- lapply(seq_along(rwis_ModNegExp), function(i) {
+
+climate_effects_ModNegExp<- lapply(seq_along(rwis_ModNegExp), function(i) {
   print(paste("Fitting climate trend for Stand #:", i))
   find_recent_trend_plm(rwis_ModNegExp[[i]],cutoff)
 })
+climate_effects_ModNegExp<-data.frame(t(data.frame(climate_effects_ModNegExp)))
+rownames(climate_effects_ModNegExp)<-seq_along(rwis_ModNegExp)
 
-saveRDS(climate_effects, file = "dataVault/climate_effects.rds", ascii = FALSE, version = NULL,
+saveRDS(climate_effects_ModNegExp, file = "dataVault/climate_effects_ModNegExp.rds", ascii = FALSE, version = NULL,
         compress = TRUE, refhook = NULL)
