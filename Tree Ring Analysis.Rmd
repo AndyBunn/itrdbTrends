@@ -1,0 +1,261 @@
+---
+title: "Tree Ring Analysis"
+author: "Gavin Scoville"
+date: "9/7/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction 
+In this analysis, we are going looking at tree ring data from the International Tree Ring Data Bank (ITRDB). This is a data repository for tree ring data, collected by dendroecologists (tree scientists) globally since 1990, but oldest tree in data were are analyzing was a pinecone sometime before 2649 b.c
+
+The raw data we are analyzing comes from a cleaned version of the ITRDB data bank. We have meta data which is organized as such: 
+
+```{r, echo=TRUE}
+#Here I find trends using fixed effects regression analysis 
+rm(list=ls())
+library(dplR)
+library(tidyverse)
+library(plm) #panel data
+
+meta <- readRDS("dataVault/meta2keep.rds")#note: this in a truncated version of the data 
+rwls <- readRDS("dataVault/rwl2keep.rds")
+meta[108:109,]
+head(rwls[[108]])
+```
+
+## Cleaning the data
+```{r, echo=FALSE}
+cutoff<- 1971 #year we start analyzing at 1971-2000 climate normal 
+data_standard = 20 #the minimum number of years of data after 1971 to be used in analysis. 
+
+suf_data_check<-function(df, cutoff,data_standard) {
+  years<-as.numeric(rownames(df))
+  recent_years<-years[years>cutoff]#making sure there are enough years
+  return(length(recent_years)>data_standard)#True if there is sufficient data 
+  #so the function would return F if there are no or less then 20 years after 1971
+}
+
+suf_data <- lapply(seq_along(rwls), function(i) {
+  print(paste("Challenging Stand #:", i))
+  suf_data_check(rwls[[i]],cutoff,data_standard)
+})
+suf_data<-unlist(suf_data)
+```
+```{r}
+summary(suf_data)
+```
+## Detrending
+The first step in looking for a climate signal in the tree rings is to try and remove the biological signal from the tree rings. We do this by creating a tree ring index, where we approximate the effect of biological processes on each tree, and then subtract them out. The best way to approximate the biological process is in hot debate in the Dendroecology world. 
+## INSERT EXAMPLE TREE
+
+The first question we want to dress, is does your method of detrending effect how you percieve the effects of climate change? 
+
+Alternative Hypothesis: The detrending methods used will bias the overall climate signal left in the tree rings.
+
+Null hypothesis: The detrending methods used will not bias the overall climate signal left in the tree rings. 
+
+So, lets start be detrending with multiple methods, and then comparing the results: 
+```{r, echo = FALSE}
+#making a function that detrends each tree, with as much vectorisation as possible. 
+'
+rm_bio_signal<-function(df, cutoff, data_check, method){
+  # here I skip all the stands that didnt pass the data check. This way we can later go back and see if we are biasing the dataset while filtering the data
+  if (data_check == F) {
+    return(rwis = data.frame(NA))#here I remove stands without relevant observations 
+    print("recent data is insuficient")
+  } else {
+    #makes 3 different estimate (to show robustness)
+    rwis <- detrend(rwl = df, method = method, pos.slope= T)
+    return(rwis)
+  }
+}
+
+rwis<-list() #making an empty list
+rwis$AgeDepSpline<- lapply(seq_along(rwls), function(i) {
+  print(paste("Detrending Stand #:", i))
+  rm_bio_signal(rwls[[i]],cutoff,suf_data[i],"AgeDepSpline")
+})
+
+rwis$Mean<- lapply(seq_along(rwls), function(i) {
+  print(paste("Detrending Stand #:", i))
+  rm_bio_signal(rwls[[i]],cutoff,suf_data[i],"Mean")
+})
+
+rwis$ModNegExp<- lapply(seq_along(rwls), function(i) {
+  print(paste("Detrending Stand #:", i))
+  rm_bio_signal(rwls[[i]],cutoff,suf_data[i],"ModNegExp")
+})
+
+saveRDS(rwis, file = "dataVault/rwis", ascii = FALSE, version = NULL,
+        compress = TRUE, refhook = NULL)
+        
+saveRDS(rwis, file = "dataVault/rwis")        
+'
+rwis<-readRDS("dataVault/rwis.rds")
+```
+## Climate effect
+
+Now that we have removed the biological signal from the tree rings, we can go on to estimate the remaining climate signal. There are still many other elements that could be effecting the tree growth rates, like each tree's health and individual microclimate. Here we are hoping that we can over come this by considering the climate effect the signal, and the rest of the effects noise. We can try to cut out the noise in our system by running a fixed effects regression, where every tree has it's own y-intercept starting at 1970, but we look for a shared trend for all the trees following 1970. 
+
+#### A caviot:
+The one element of noise that is particularly stubborn is stand-wide dynamics. For example, if the stand just been thinned,the remaining trees will grow especially quickly now that they are not competing so intensely. Since stand dynamics effect all the trees in a stand, and generally have ~30 year effects, it is difficult to determine what is due to stand dynamics and what is due to the climate. Keep this in mind for later, when we interpite trends.
+
+
+#### First, we build a function: 
+```{r, echo = FALSE}
+  #To estimate the Fixed Effects Regression
+find_recent_trend_plm <- function(df,cutoff) {
+  rwi <- df
+  rwi$year <- as.numeric(rownames(rwi))
+  recent_rwi <- rwi[as.numeric(rownames(rwi)) > cutoff, ]
+  
+  long_recent_rwi <- pivot_longer(
+    recent_rwi, 
+    cols = setdiff(names(df), "year"),#returns the names of the dataset that dont include the set: c("year)
+    names_to = "tree", 
+    values_to = "std"
+  )
+  p_recent_rwi <- pdata.frame(long_recent_rwi, index = "tree")
+  model_fe <- plm(std ~ year, data = p_recent_rwi, model = "within")
+  
+  if (all(model_fe$coefficients == 0)) {
+    print("Model is empty")
+    return(c(NA,NA,NA))
+  } else {
+    results <- extract_plm_values(model_fe)
+    return(results)
+  }
+}
+#this is just a function that can grab all the parts of model we want, so we don't have to store a thousand models
+extract_plm_values <- function(model) {
+  if (!inherits(model, "plm")) {
+    stop("The provided model is not a valid plm model.")
+  }
+  model_summary <- summary(model)
+  coefficients_summary <- model_summary$coefficients
+  Estimate<-coefficients_summary[, "Estimate"]
+  SE<-coefficients_summary[, "Std. Error"]
+  Pvalue<-coefficients_summary[, "Pr(>|t|)"]
+  return(c(year_effect = as.numeric(Estimate), SE = as.numeric(SE), Pvalue = as.numeric(Pvalue)))
+}
+
+```
+
+#### Then we apply the function to each stand: 
+```{r, echo=FALSE}
+climate_effects<-list() #making an empty list
+climate_effects$AgeDepSpline<- lapply(seq_along(rwls), function(i) {
+  print(paste("Fitting climate trend for Stand #:", i))
+  find_recent_trend_plm(rwis$AgeDepSpline[[i]],cutoff)
+})
+
+climate_effects$Mean<- lapply(seq_along(rwls), function(i) {
+  print(paste("Fitting climate trend for Stand #:", i))
+  find_recent_trend_plm(rwis$Mean[[i]],cutoff)
+})
+
+climate_effects$ModNegExp<- lapply(seq_along(rwls), function(i) {
+  print(paste("Fitting climate trend for Stand #:", i))
+  find_recent_trend_plm(rwis$ModNegExp[[i]],cutoff)
+})
+
+```
+Now we have an estimate of the the effect of climate on each stand, after three types of the tetrending techniques 
+```{r}
+#AgeDepSpline
+climate_effects_AgeDepSpline<-t(data.frame(climate_effects$AgeDepSpline))%>%
+  data.frame()
+names(climate_effects_AgeDepSpline)<-c("AgeDepSpline","AgeDepSpline_SE","AgeDepSpline_Pvalue" )
+summary(climate_effects_AgeDepSpline)
+
+climate_effects_Mean<-t(data.frame(climate_effects$Mean))%>%
+  data.frame()
+names(climate_effects_Mean)<-c("Mean","Mean_SE","Mean_Pvalue" )
+summary(climate_effects_Mean)
+
+climate_effects_ModNegExp<-t(data.frame(climate_effects$ModNegExp))%>%
+  data.frame()
+names(climate_effects_ModNegExp)<-c("ModNegExp","ModNegExp_SE","ModNegExp_Pvalue" )
+summary(climate_effects_ModNegExp)
+
+```
+Now we can make some summary graphs to try and understand these differences relationships more closely: 
+```{r}
+
+library(tidyverse)
+library(PNWColors)
+library(gridExtra)
+
+df <- cbind(climate_effects_AgeDepSpline,climate_effects_Mean,climate_effects_ModNegExp)
+str(df)
+cor(df[c("ModNegExp","Mean","AgeDepSpline")])#whoa, lower then expected 
+#plotting this relationship:
+pal2<-pnw_palette(name="Cascades",n=3)
+print(pal2)
+
+p1<-ggplot(df,aes(x=Mean, y=ModNegExp))+
+  geom_point(shape=1)+
+  geom_smooth(method = "lm",formula = y ~ poly(x, 2),color=pal2[1], fill=pal2[2])+
+  geom_abline(intercept = 0, slope=1, color=1)+
+  labs(title="Change in Tree RWI pr. Year",
+       subtitle = "Mean vs ModNegExp")+
+    scale_x_continuous(limits = c(-.03, .055), breaks = seq(-0.025, 0.05, 0.025), labels = scales::percent) +
+    scale_y_continuous(limits = c(-.03, .055), breaks = seq(-0.025, 0.05, 0.025), labels = scales::percent)+
+  theme_bw() #haveto make both sides scale the same 
+
+
+p2<-ggplot(df,aes(x=Mean, y=AgeDepSpline))+
+  geom_point(shape=1)+
+  labs(title="Change in Tree RWI pr. Year",
+       subtitle = "Mean vs AgeDepSpline")+
+  geom_smooth(method = "lm",formula = y ~ poly(x, 2),color=pal2[1], fill=pal2[2])+
+  geom_abline(intercept = 0, slope=1, color=1)+
+  scale_x_continuous(limits = c(-.03, .055), breaks = seq(-0.025, 0.05, 0.025), labels = scales::percent) +
+  scale_y_continuous(limits = c(-.03, .055), breaks = seq(-0.025, 0.05, 0.025), labels = scales::percent)+
+  theme_bw() #haveto make both sides scale the same 
+
+p3<-ggplot(df,aes(x=ModNegExp, y=AgeDepSpline))+
+  geom_point(shape=1)+
+  geom_smooth(method = "lm",formula = y ~ poly(x, 2),color=pal2[1], fill=pal2[2])+
+  geom_abline(intercept = 0, slope=1, color=1)+
+  labs(title="Change in Tree RWI pr. Year",
+       subtitle = "ModNegExp vs AgeDepSpline")+
+  scale_x_continuous(limits = c(-.03, .055), breaks = seq(-0.025, 0.05, 0.025), labels = scales::percent) +
+  scale_y_continuous(limits = c(-.03, .055), breaks = seq(-0.025, 0.05, 0.025), labels = scales::percent)+
+  theme_bw()
+
+#there has got to be a way to look at this more in depth, but I am not sure how
+Pairwise_Method_Comparisons<-grid.arrange(p1, p2, p3, nrow = 1, widths= c(1,1,1), heights= 1)
+ggsave("Plots/Pairwise_Method_Comparisons.png",plot = Pairwise_Method_Comparisons, width = 10, height = 4, units = "in", dpi = 600)
+```
+
+##ypothesis testing: 
+```{r}
+df$residuals<-df$ModNegExp-df$AgeDepSpline
+
+norm_prob_plot <- ggplot(data = df, aes(sample = residuals)) +
+  stat_qq(shape = 1) + 
+  geom_abline(intercept = mean(df$residuals), slope = sd(df$residuals), color = "red") +  # Add a reference line
+  labs(x = "Theoretical Quantiles", y = "Sample Quantiles", title = "Normal Probability Plot of Residuals")+
+  theme_bw()
+
+#so its only really failing for trees which are fluctuating greatly 
+
+sd(df$AgeDepSpline)
+sd(df$Mean)
+sd(df$ModNegExp)
+
+#Z-test using the t distribution
+
+```
+
+#Now, I wonder if groups of 
+```{r}
+
+```
+
+
